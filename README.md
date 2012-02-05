@@ -7,6 +7,9 @@ string.
 @contract('(str,) -> str')
 def exclaim(s):
     return s + '!'
+
+exclaim('hello') # prints 'hello!'
+exclaim(5)       # raises FailedContract
 ```
 
 Here's a method that takes a string, and returns a method that takes a
@@ -19,4 +22,8 @@ def prepender(s):
     def wrapper(s2):
         return s + s2
     return wrapper
+
+prepender('hello, ')('dave') # prints 'hello, dave'
+prepender(5)                 # raises FailedContract
+prepender('hi')(5)           # raises FailedContract
 ```
