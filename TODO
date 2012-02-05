@@ -1,2 +1,6 @@
 . split earley parser out
 . see the commented out contracts.. those should work
+. check_value() should probably produce a magical function
+  that someone dissociates itself from the references to the
+  parse tree
+. grep for 'horrible'
