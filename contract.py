@@ -128,9 +128,9 @@ def check_value(schema, value):
                 if value.__contract__ != expected_contract:
                     raise FailedContract('the contract is %s, we wanted %s' % (value.__contract__, expected_contract))
             else:
-                raise FailedContract('expected a contract-wrapped function')
+                raise FailedContract('expected a contract-wrapped method')
         else:
-            raise FailedContract('expected function, got %s' % type(value))
+            raise FailedContract('expected method, got %s' % type(value).__name__)
 
     # typ
     elif rule_matcher(schema, 'typ', 'fixed_tup'):
@@ -138,7 +138,7 @@ def check_value(schema, value):
     elif rule_matcher(schema, 'typ', t_type):
         expect_type = schema['rhs'][0]['token']
         if expect_type != type(value).__name__:
-            raise FailedContract('expected type %s, got type %s' % (expect_type, type(value)))
+            raise FailedContract('expected type %s, got type %s' % (expect_type, type(value).__name__))
     elif rule_matcher(schema, 'typ', t_lparen, 'typ', t_rparen):
         check_value(schema['rhs'][1], value)
     elif rule_matcher(schema, 'typ', 'fun'):
@@ -149,18 +149,21 @@ def check_value(schema, value):
         if value != ():
             raise FailedContract('expected the empty tuple, got %s' % value)
     elif rule_matcher(schema, 'fixed_tup', t_lparen, 'typ', t_comma, 'more_fixed_tup', t_rparen):
-        check_value(schema['rhs'][1], value[0])
-        i = 1
+        expected = [schema['rhs'][1]]
         p = schema['rhs'][3]
         while True:
             if rule_matcher(p, 'more_fixed_tup'):
                 break
             elif rule_matcher(p, 'more_fixed_tup', 'typ', 'more_fixed_tup'):
-                check_value(p['rhs'][0], value[i])
-                i += 1
+                expected.append(p['rhs'][0])
                 p = p['rhs'][1]
             else:
                 raise InternalContractError('the parsetree is fucked right here')
+        if type(value) != tuple:
+            raise FailedContract('expected a %s-ple, got a %s' % (len(expected), type(value)))
+        if len(value) != len(expected):
+            raise FailedContract('expected a %s-ple, got a %s-ple' % (len(expected), len(value)))
+        [check_value(e, v) for e, v in zip(expected, value)]
 
     # we're fucked!
     else:
