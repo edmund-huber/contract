@@ -1,5 +1,17 @@
 import re
 
+class InvalidContract(Exception):
+    pass
+
+class AmbiguousContract(Exception):
+    pass
+
+class FailedContract(Exception):
+    pass
+
+class InternalContractError(Exception):
+    pass
+
 t_type = ('type', r'[A-Za-z]+')
 t_arrow = ('arrow', r'->')
 t_lparen = ('lparen', r'\(')
@@ -106,12 +118,6 @@ def earley(s):
             return {'lhs': state['lhs'], 'rhs': tuple(pretty(rhs) for rhs in state['rhs']), 'span': state['span']}
     return map(pretty, complete)
 
-class FailedContract(Exception):
-    pass
-
-class InternalContractError(Exception):
-    pass
-
 def check_value(schema, value):
     # fun
     if rule_matcher(schema, 'fun', 'fixed_tup', t_arrow, 'typ'):
@@ -168,8 +174,10 @@ def contract(s, debug=False):
     if debug:
         import pprint
         pprint.PrettyPrinter().pprint(exprs)
-    assert len(exprs) > 0, 'contract could not be parsed!'
-    assert len(exprs) == 1, 'contract is not unambiguous!'
+    if len(exprs) == 0:
+        raise InvalidContract('contract could not be parsed!')
+    if len(exprs) > 1:
+        raise AmbiguousContract('contract is not unambiguous!')
     parse = exprs[0]
     # here's the wrapper that enforces the contract.
     def wrapped(f):
@@ -185,38 +193,4 @@ def contract(s, debug=False):
         inner.__contract__ = s
         return inner
     return wrapped
-
-#@contract("->") # cannot be parsed.
-def invalid():
-    return None
-
-#@contract("str") # is not a function type..
-def invalid():
-    return None
-
-#@contract("str -> str -> str") # has more than one interpretation: (str -> str) -> str , or str -> (str -> str)
-def invalid():
-    return None
-
-@contract("(str,) -> str", debug=True)
-def exclaim(s):
-    return s + "!"
-
-print exclaim('hi')
-
-@contract("(str,) -> (str,) -> str", debug=True)
-def prepender(s):
-    @contract("(str,) -> str", debug=True)
-    def wrapper(s2):
-        return s + s2
-    return wrapper
-
-print prepender('hello, ')('dave')
-
-#@contract("int -> int?")
-def nonzero(i):
-    if i == 0:
-        None
-    else:
-        return i
 
