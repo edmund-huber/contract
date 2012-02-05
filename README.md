@@ -16,7 +16,7 @@ string and returns a string.
 @contract('(str,) -> (str,) -> str')
 def prepender(s):
     @contract('(str,) -> str')
-        def wrapper(s2):
-            return s + s2
-        return wrapper
+    def wrapper(s2):
+        return s + s2
+    return wrapper
 ```
