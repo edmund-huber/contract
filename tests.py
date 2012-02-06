@@ -40,7 +40,7 @@ class TestContracts(unittest.TestCase):
         self.assertRaisesRegexp(FailedContract, r'^expected a contract-wrapped method$', i_give_you_happy, lambda s: s)
 
     def test_unit(self):
-        @contract('() -> int')
+        @contract('(,) -> int')
         def f():
             return 42
         # this is ok
@@ -60,53 +60,76 @@ class TestContracts(unittest.TestCase):
         # these are not ok
         self.assertRaisesRegexp(FailedContract, r'^expected type C, got type type$', f, C)
         self.assertRaisesRegexp(FailedContract, r'^expected type C, got type int$', f, 42)
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type type$',  f, object)
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type object$',  f, object())
+        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type type$', f, object)
+        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type object$', f, object())
 
     def test_nested_unit(self):
-        @contract('(((),),) -> str')
+        @contract('(((,),),) -> str')
         def f(unit_unit):
             return 'hello'
         # this is ok
-        self.assertEqual(f((())), 'hello')
+        self.assertEqual(f(((),)), 'hello')
         # these are not ok
-        # ..
+        self.assertRaisesRegexp(FailedContract, r'^expected a 1-ple, got a 0-ple$', f, ())
+        self.assertRaisesRegexp(FailedContract, r'^expected a 1-ple, got a str$', f, ('hi'))
 
     def test_list_of_int(self):
-        @contract('[int] -> str')
+        @contract('([int],) -> str')
         def f(l):
             return ','.join([str(i) for i in l])
         # this is ok
         self.assertEqual(f([1, 2, 3]), '1,2,3')
+        self.assertEqual(f([]), '')
         # these are not ok
-        # ..
+        self.assertRaisesRegexp(FailedContract, r'^expected a list, got a NoneType$', f, None)
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, ['hi'])
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [42, 'hi'])
 
     def test_list_of_list_of_int(self):
-        @contract('[[int]] -> str')
+        @contract('([[int]],) -> str')
         def f(l_o_l):
             return ';'.join([','.join([str(i) for i in l]) for l in l_o_l])
         # this is ok
         self.assertEqual(f([[1, 2, 3], [4, 5, 6]]), '1,2,3;4,5,6')
+        self.assertEqual(f([[1, 2, 3]]), '1,2,3')
+        self.assertEqual(f([[]]), '')
+        self.assertEqual(f([]), '')
         # these are not ok
-        # ..
+        self.assertRaisesRegexp(FailedContract, r'^expected a list, got a int$', f, [1, 2, 3])
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [[], ['hi']])
 
     def test_set_of_int(self):
-        @contract('{int} -> int')
+        @contract('({int},) -> int')
         def f(s):
             return len(s)
         # this is ok
         self.assertEqual(f(set([1, 2, 3])), 3)
+        self.assertEqual(f(set()), 0)
         # these are not ok
-        # ..
+        self.assertRaisesRegexp(FailedContract, r'^expected a set, got a list$', f, [1, 2, 3])
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, set([1, 2, 'hi']))
 
     def test_list_of_set_of_int(self):
-        @contract('[{int}] -> [int]')
+        @contract('([{int}],) -> [int]')
         def f(l_o_s):
             return [len(s) for s in l_o_s]
         # this is ok
         self.assertEqual(f([set([1, 2, 3]), set([4, 5]), set([1])]), [3, 2, 1])
+        self.assertEqual(f([]), [])
+        self.assertEqual(f([set()]), [0])
         # these are not ok
-        # ..
+        self.assertRaisesRegexp(FailedContract, r'^expected a set, got a int$', f, [1, 2, 3])
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [set(), set(['hi'])])
+
+    def test_dict(self):
+        @contract('(int:str, int) -> str')
+        def f(m, i):
+            return m[i]
+        # this is ok
+        self.assertEqual(f({5: 'hi'}, 5), 'hi')
+        # this is not ok
+        self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', f, {5: 10}, 5)
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, {'hello': 'hi'}, 5)
 
     def test_invalid_contracts(self):
         # that's just not a valid type.

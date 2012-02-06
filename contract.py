@@ -17,17 +17,31 @@ t_arrow = ('arrow', r'->')
 t_lparen = ('lparen', r'\(')
 t_rparen = ('rparen', r'\)')
 t_comma = ('comma', r',')
+t_lbrack = ('lbrack', r'\[')
+t_rbrack = ('rbrack', r'\]')
+t_lbrace = ('lbrace', r'{')
+t_rbrace = ('rbrace', r'}')
+t_colon = ('colon', r':')
 
 root = 'fun'
 rules = [
     ('fun', ('fixed_tup', t_arrow, 'typ')),
 
-    ('fixed_tup', (t_lparen, t_rparen)),
+    ('fixed_tup', (t_lparen, t_comma, t_rparen)),
     ('fixed_tup', (t_lparen, 'typ', t_comma, 'more_fixed_tup', t_rparen)),
     ('more_fixed_tup', ()),
     ('more_fixed_tup', ('typ', 'more_fixed_tup')),
 
+    ('list', (t_lbrack, 'typ', t_rbrack)),
+
+    ('set', (t_lbrace, 'typ', t_rbrace)),
+
+    ('dict', ('typ', t_colon, 'typ')),
+
     ('typ', ('fixed_tup',)),
+    ('typ', ('list',)),
+    ('typ', ('set',)),
+    ('typ', ('dict',)),
     ('typ', (t_type,)),
     ('typ', (t_lparen, 'typ', t_rparen)),
     ('typ', ('fun',))
@@ -135,6 +149,12 @@ def check_value(schema, value):
     # typ
     elif rule_matcher(schema, 'typ', 'fixed_tup'):
         check_value(schema['rhs'][0], value)
+    elif rule_matcher(schema, 'typ', 'list'):
+        check_value(schema['rhs'][0], value)
+    elif rule_matcher(schema, 'typ', 'set'):
+        check_value(schema['rhs'][0], value)
+    elif rule_matcher(schema, 'typ', 'dict'):
+        check_value(schema['rhs'][0], value)
     elif rule_matcher(schema, 'typ', t_type):
         expect_type = schema['rhs'][0]['token']
         if expect_type != type(value).__name__:
@@ -144,8 +164,33 @@ def check_value(schema, value):
     elif rule_matcher(schema, 'typ', 'fun'):
         check_value(schema['rhs'][0], value)
 
+    # list
+    elif rule_matcher(schema, 'list', t_lbrack, 'typ', t_rbrack):
+        if type(value) == list:
+            for v in value:
+                check_value(schema['rhs'][1], v)
+        else:
+            raise FailedContract('expected a list, got a %s' % type(value).__name__)
+
+    # set
+    elif rule_matcher(schema, 'set', t_lbrace, 'typ', t_rbrace):
+        if type(value) == set:
+            for v in value:
+                check_value(schema['rhs'][1], v)
+        else:
+            raise FailedContract('expected a set, got a %s' % type(value).__name__)
+
+    # dict
+    elif rule_matcher(schema, 'dict', 'typ', t_colon, 'typ'):
+        if type(value) == dict:
+            for k, v in value.iteritems():
+                check_value(schema['rhs'][0], k)
+                check_value(schema['rhs'][2], v)
+        else:
+            raise FailedContract('expected a dict, got a %s' % type(value).__name__)
+
     # fixed_tup, more_fixed_tup
-    elif rule_matcher(schema, 'fixed_tup', t_lparen, t_rparen):
+    elif rule_matcher(schema, 'fixed_tup', t_lparen, t_comma, t_rparen):
         if value != ():
             raise FailedContract('expected the empty tuple, got %s' % value)
     elif rule_matcher(schema, 'fixed_tup', t_lparen, 'typ', t_comma, 'more_fixed_tup', t_rparen):
@@ -160,7 +205,7 @@ def check_value(schema, value):
             else:
                 raise InternalContractError('the parsetree is fucked right here')
         if type(value) != tuple:
-            raise FailedContract('expected a %s-ple, got a %s' % (len(expected), type(value)))
+            raise FailedContract('expected a %s-ple, got a %s' % (len(expected), type(value).__name__))
         if len(value) != len(expected):
             raise FailedContract('expected a %s-ple, got a %s-ple' % (len(expected), len(value)))
         [check_value(e, v) for e, v in zip(expected, value)]
