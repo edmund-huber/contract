@@ -122,14 +122,39 @@ class TestContracts(unittest.TestCase):
         self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [set(), set(['hi'])])
 
     def test_dict(self):
-        @contract('(int:str, int) -> str')
+        class C(object):
+            pass
+        @contract('(int:str, int) -> C')
         def f(m, i):
-            return m[i]
+            return C()
         # this is ok
-        self.assertEqual(f({5: 'hi'}, 5), 'hi')
+        self.assertEqual(type(f({5: 'hi'}, 5)), C)
         # this is not ok
         self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', f, {5: 10}, 5)
         self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, {'hello': 'hi'}, 5)
+
+    def test_nullable(self):
+        @contract('(int?,) -> int')
+        def f(i):
+            if i is None:
+                return 5
+            else:
+                return i * 2
+        # ok
+        self.assertEqual(f(None), 5)
+        self.assertEqual(f(2), 4)
+        # not ok
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, 'blargh')
+
+    def test_nullable_dict(self):
+        @contract('(int, int:(str?)) -> str')
+        def f(i, m):
+            return m[i] or 'bloop'
+        # OK
+        self.assertEqual(f(5, {5: 'z'}), 'z')
+        self.assertEqual(f(5, {5: None}), 'bloop')
+        # not ok
+        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type NoneType$', f, 5, {None: 'aaa'})
 
     def test_invalid_contracts(self):
         # that's just not a valid type.

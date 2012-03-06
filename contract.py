@@ -22,6 +22,7 @@ t_rbrack = ('rbrack', r'\]')
 t_lbrace = ('lbrace', r'{')
 t_rbrace = ('rbrace', r'}')
 t_colon = ('colon', r':')
+t_question = ('question', r'\?')
 
 root = 'fun'
 rules = [
@@ -38,13 +39,16 @@ rules = [
 
     ('dict', ('typ', t_colon, 'typ')),
 
-    ('typ', ('fixed_tup',)),
-    ('typ', ('list',)),
-    ('typ', ('set',)),
-    ('typ', ('dict',)),
-    ('typ', (t_type,)),
-    ('typ', (t_lparen, 'typ', t_rparen)),
-    ('typ', ('fun',))
+    ('t', ('fixed_tup',)),
+    ('t', ('list',)),
+    ('t', ('set',)),
+    ('t', ('dict',)),
+    ('t', (t_type,)),
+    ('t', (t_lparen, 'typ', t_rparen)),
+    ('t', ('fun',)),
+    # either nullable, or not.
+    ('typ', ('t', t_question)),
+    ('typ', ('t',)),
     ]
 
 def rule_matcher(rule, lhs, *rhs):
@@ -146,23 +150,30 @@ def check_value(schema, value):
         else:
             raise FailedContract('expected method, got %s' % type(value).__name__)
 
-    # typ
-    elif rule_matcher(schema, 'typ', 'fixed_tup'):
+    # t
+    elif rule_matcher(schema, 't', 'fixed_tup'):
         check_value(schema['rhs'][0], value)
-    elif rule_matcher(schema, 'typ', 'list'):
+    elif rule_matcher(schema, 't', 'list'):
         check_value(schema['rhs'][0], value)
-    elif rule_matcher(schema, 'typ', 'set'):
+    elif rule_matcher(schema, 't', 'set'):
         check_value(schema['rhs'][0], value)
-    elif rule_matcher(schema, 'typ', 'dict'):
+    elif rule_matcher(schema, 't', 'dict'):
         check_value(schema['rhs'][0], value)
-    elif rule_matcher(schema, 'typ', t_type):
+    elif rule_matcher(schema, 't', t_type):
         expect_type = schema['rhs'][0]['token']
         if expect_type != type(value).__name__:
             raise FailedContract('expected type %s, got type %s' % (expect_type, type(value).__name__))
-    elif rule_matcher(schema, 'typ', t_lparen, 'typ', t_rparen):
+    elif rule_matcher(schema, 't', t_lparen, 'typ', t_rparen):
         check_value(schema['rhs'][1], value)
-    elif rule_matcher(schema, 'typ', 'fun'):
+    elif rule_matcher(schema, 't', 'fun'):
         check_value(schema['rhs'][0], value)
+
+    # typ
+    elif rule_matcher(schema, 'typ', 't'):
+        check_value(schema['rhs'][0], value)
+    elif rule_matcher(schema, 'typ', 't', t_question):
+        if value is not None:
+            check_value(schema['rhs'][0], value)
 
     # list
     elif rule_matcher(schema, 'list', t_lbrack, 'typ', t_rbrack):
