@@ -1,9 +1,16 @@
+import termcolor
 import re
+
+def red(s):
+    return termcolor.colored(s, 'red')
 
 class InvalidContract(Exception):
     pass
 
 class AmbiguousContract(Exception):
+    pass
+
+class InternalFailedContract(Exception):
     pass
 
 class FailedContract(Exception):
@@ -127,7 +134,7 @@ def earley(s):
                 chart[i] = new_states
             else:
                 break
-    # return the last column after we pretty it up a bit.
+    # return the last column of states after we pretty it up a bit.
     complete = filter(lambda state: state['begin'] == 0 and not state['uncompleted_rhs'] and state['lhs'] == root, chart[-1])
     def pretty(state):
         if 'term' in state:
@@ -139,16 +146,16 @@ def earley(s):
 def check_value(schema, value):
     # fun
     if rule_matcher(schema, 'fun', 'fixed_tup', t_arrow, 'typ'):
+        expected_contract = '%s->%s' % (schema['rhs'][0]['span'], schema['rhs'][2]['span'])
         if type(value).__name__ == 'function':
             if getattr(value, '__contract__', None) is not None:
                 # this is so horrible, i am a horrible
-                expected_contract = '%s->%s' % (schema['rhs'][0]['span'], schema['rhs'][2]['span'])
                 if value.__contract__ != expected_contract:
-                    raise FailedContract('the contract is %s, we wanted %s' % (value.__contract__, expected_contract))
+                    raise InternalFailedContract(expected_contract, red(value.__contract__))
             else:
-                raise FailedContract('expected a contract-wrapped method')
+                raise InvalidContract('expected a contract-wrapped method') #maybe??????
         else:
-            raise FailedContract('expected method, got %s' % type(value).__name__)
+            raise InternalFailedContract(expected_contract, red(type(value).__name__))
 
     # t
     elif rule_matcher(schema, 't', 'fixed_tup'):
@@ -162,7 +169,7 @@ def check_value(schema, value):
     elif rule_matcher(schema, 't', t_type):
         expect_type = schema['rhs'][0]['token']
         if expect_type != type(value).__name__:
-            raise FailedContract('expected type %s, got type %s' % (expect_type, type(value).__name__))
+            raise InternalFailedContract(expect_type, red(type(value).__name__))
     elif rule_matcher(schema, 't', t_lparen, 'typ', t_rparen):
         check_value(schema['rhs'][1], value)
     elif rule_matcher(schema, 't', 'fun'):
@@ -179,31 +186,53 @@ def check_value(schema, value):
     elif rule_matcher(schema, 'list', t_lbrack, 'typ', t_rbrack):
         if type(value) == list:
             for v in value:
-                check_value(schema['rhs'][1], v)
+                try:
+                    check_value(schema['rhs'][1], v)
+                except InternalFailedContract, e:
+                    # unlike tuples, shortcircuit, because lists are supposed to be homogenous.
+                    raise InternalFailedContract(schema['span'], '[..' + red(e.args[1]) + '..]')
         else:
-            raise FailedContract('expected a list, got a %s' % type(value).__name__)
+            raise InternalFailedContract(schema['span'], red(type(value).__name__))
 
     # set
     elif rule_matcher(schema, 'set', t_lbrace, 'typ', t_rbrace):
         if type(value) == set:
             for v in value:
-                check_value(schema['rhs'][1], v)
+                try:
+                    check_value(schema['rhs'][1], v)
+                except InternalFailedContract, e:
+                    # just like for lists, we shortcircuit, because sets are homogenous.
+                    raise InternalFailedContract(schema['span'], '{..' + red(e.args[1]) + '..}')
         else:
-            raise FailedContract('expected a set, got a %s' % type(value).__name__)
+            raise InternalFailedContract(schema['span'], red(type(value).__name__))
 
     # dict
     elif rule_matcher(schema, 'dict', 'typ', t_colon, 'typ'):
         if type(value) == dict:
             for k, v in value.iteritems():
-                check_value(schema['rhs'][0], k)
-                check_value(schema['rhs'][2], v)
+                is_okay = True
+                key_span = schema['rhs'][0]['span']
+                value_span = schema['rhs'][2]['span']
+                try:
+                    check_value(schema['rhs'][0], k)
+                except InternalFailedContract, e:
+                    # " " " dicts are homogenous.
+                    key_span = red(e.args[1])
+                    is_okay = False
+                try:
+                    check_value(schema['rhs'][2], v)
+                except InternalFailedContract, e:
+                    value_span = red(e.args[1])
+                    is_okay = False
+                if not is_okay:
+                    raise InternalFailedContract(schema['span'], '{..' + key_span + ':' + value_span + '..}')
         else:
-            raise FailedContract('expected a dict, got a %s' % type(value).__name__)
+            raise InternalFailedContract(schema['span'], red(type(value).__name__))
 
     # fixed_tup, more_fixed_tup
     elif rule_matcher(schema, 'fixed_tup', t_lparen, t_comma, t_rparen):
         if value != ():
-            raise FailedContract('expected the empty tuple, got %s' % value)
+            raise InternalFailedContract(schema['span'], type(value).__name__)
     elif rule_matcher(schema, 'fixed_tup', t_lparen, 'typ', t_comma, 'more_fixed_tup', t_rparen):
         expected = [schema['rhs'][1]]
         p = schema['rhs'][3]
@@ -216,11 +245,22 @@ def check_value(schema, value):
             else:
                 raise InternalContractError('the parsetree is fucked right here')
         if type(value) != tuple:
-            raise FailedContract('expected a %s-ple, got a %s' % (len(expected), type(value).__name__))
+            raise InternalFailedContract(schema['span'], type(value).__name__)
         if len(value) != len(expected):
-            raise FailedContract('expected a %s-ple, got a %s-ple' % (len(expected), len(value)))
-        [check_value(e, v) for e, v in zip(expected, value)]
-
+            raise InternalFailedContract(schema['span'], '(' + ('_,' * len(value)) + ')')
+        # complicated error reporting follows
+        matches = True
+        discovered = []
+        for e, v in zip(expected, value):
+            try:
+                check_value(e, v)
+            except InternalFailedContract, e:
+                discovered.append(e.args[1])
+                matches = False
+            else:
+                discovered.append(e['span'])
+        if not matches:
+            raise InternalFailedContract(schema['span'], '(' + ','.join(discovered) + ',)')
     # we're fucked!
     else:
         import pprint
@@ -242,10 +282,18 @@ def contract(s, debug=False):
     def wrapped(f):
         def inner(*args):
             # check the input..
-            check_value(parse['rhs'][0], args)
-            # check the output..
+            try:
+                check_value(parse['rhs'][0], args)
+            except InternalFailedContract, e:
+                raise FailedContract('expected input is %s, but got %s' % (e.args[0], e.args[1]))
+            # Now check the output. We do input and output checking
+            # separately, because we don't want to run the inner
+            # method with input which we know is wrong.
             output = f(*args)
-            check_value(parse['rhs'][2], output)
+            try:
+                check_value(parse['rhs'][2], output)
+            except InternalFailedContract, e:
+                raise FailedContract('expected output is %s, but got %s' % (e.args[0], e.args[1]))
             # if it got this far, we're good.
             return output
         # this is horrible, there needs to be some enforcement of a canonical form for this to really work

@@ -1,10 +1,6 @@
 wish bucket:
   . split earley parser out
   . check_value() should probably produce a magical function
-    that someone dissociates itself from the references to the
+    that somehow dissociates itself from the references to the
     parse tree
   . grep for 'horrible'
-
-more schemas that ought to work:
-  . int -> int? # takes an int, will return either an int or None
-  . lists

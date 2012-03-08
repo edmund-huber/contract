@@ -1,7 +1,14 @@
-from contract import contract, InvalidContract, FailedContract
+from contract import contract, InvalidContract, FailedContract, red
 import unittest
 
-class TestContracts(unittest.TestCase):
+class BetterTestCase(unittest.TestCase):
+
+    def assertRaisesString(self, e_class, e_message, f, *args, **kwargs):
+        with self.assertRaises(e_class) as cm:
+            f(*args, **kwargs)
+        self.assertEqual(cm.exception.message, e_message)
+
+class TestContracts(BetterTestCase):
     
     def test_str_to_str(self):
         @contract('(str,) -> str')
@@ -10,7 +17,7 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(exclaim('hello'), 'hello!')
         # this is not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', exclaim, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (str,), but got (%s,)' % red('int'), exclaim, 5)
 
     def test_str_to_str_to_str(self):
         @contract('(str,) -> (str,) -> str')
@@ -22,8 +29,8 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(prepender('hello, ')('dave'), 'hello, dave')
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', prepender, 5)
-        self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', prepender('hello, '), 5)
+        self.assertRaisesString(FailedContract, 'expected input is (str,), but got (%s,)' % red('int'), prepender, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (str,), but got (%s,)' % red('int'), prepender('hello, '), 5)
 
     def test_argle_bargle(self):
         @contract('((str,) -> str,) -> str')
@@ -35,9 +42,12 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(i_give_you_happy(joy_joy), 'happy happy joy joy')
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a 1-ple, got a 0-ple$', i_give_you_happy) # TODO: this could be a more useful message.
-        self.assertRaisesRegexp(FailedContract, r'^expected method, got str$', i_give_you_happy, 'joy joy')
-        self.assertRaisesRegexp(FailedContract, r'^expected a contract-wrapped method$', i_give_you_happy, lambda s: s)
+        self.assertRaisesString(FailedContract, 'expected input is ((str,)->str,), but got ()', i_give_you_happy)
+        self.assertRaisesString(FailedContract, 'expected input is ((str,)->str,), but got (%s,)' % red('str'), i_give_you_happy, 'joy joy')
+        # I opine that this contract was never valid in the first
+        # place. This is the only case that this exception should ever
+        # be raised after a contract has been parsed.
+        self.assertRaisesString(InvalidContract, 'expected a contract-wrapped method', i_give_you_happy, lambda s: s)
 
     def test_unit(self):
         @contract('(,) -> int')
@@ -46,8 +56,8 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(f(), 42)
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected the empty tuple, got \(\)$', f, ()) # TODO, heh
-        self.assertRaisesRegexp(FailedContract, r'^expected the empty tuple, got \(5,\)$', f, (5,))
+        self.assertRaisesString(FailedContract, 'expected input is (,), but got tuple', f, ()) # TODO, heh
+        self.assertRaisesString(FailedContract, 'expected input is (,), but got tuple', f, (5,))
 
     def test_class(self):
         class C(object):
@@ -58,10 +68,10 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(f(C()), 42)
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type type$', f, C)
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type int$', f, 42)
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type type$', f, object)
-        self.assertRaisesRegexp(FailedContract, r'^expected type C, got type object$', f, object())
+        self.assertRaisesString(FailedContract, 'expected input is (C,), but got (%s,)' % red('type'), f, C)
+        self.assertRaisesString(FailedContract, 'expected input is (C,), but got (%s,)' % red('int'), f, 42)
+        self.assertRaisesString(FailedContract, 'expected input is (C,), but got (%s,)' % red('type'), f, object)
+        self.assertRaisesString(FailedContract, 'expected input is (C,), but got (%s,)' % red('object'), f, object())
 
     def test_nested_unit(self):
         @contract('(((,),),) -> str')
@@ -70,8 +80,8 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(f(((),)), 'hello')
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a 1-ple, got a 0-ple$', f, ())
-        self.assertRaisesRegexp(FailedContract, r'^expected a 1-ple, got a str$', f, ('hi'))
+        self.assertRaisesString(FailedContract, 'expected input is (((,),),), but got ((),)', f, ())
+        self.assertRaisesString(FailedContract, 'expected input is (((,),),), but got (str,)', f, ('hi'))
 
     def test_list_of_int(self):
         @contract('([int],) -> str')
@@ -81,9 +91,9 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f([1, 2, 3]), '1,2,3')
         self.assertEqual(f([]), '')
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a list, got a NoneType$', f, None)
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, ['hi'])
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [42, 'hi'])
+        self.assertRaisesString(FailedContract, 'expected input is ([int],), but got (%s,)' % red('NoneType'), f, None)
+        self.assertRaisesString(FailedContract, 'expected input is ([int],), but got ([..%s..],)' % red('str'), f, ['hi'])
+        self.assertRaisesString(FailedContract, 'expected input is ([int],), but got ([..%s..],)' % red('str'), f, [42, 'hi'])
 
     def test_list_of_list_of_int(self):
         @contract('([[int]],) -> str')
@@ -94,9 +104,9 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f([[1, 2, 3]]), '1,2,3')
         self.assertEqual(f([[]]), '')
         self.assertEqual(f([]), '')
-        # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a list, got a int$', f, [1, 2, 3])
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [[], ['hi']])
+        # these are not ok 
+        self.assertRaisesString(FailedContract, 'expected input is ([[int]],), but got ([..%s..],)' % red('int'), f, [1, 2, 3])
+        self.assertRaisesString(FailedContract, 'expected input is ([[int]],), but got ([..%s..],)' % red('[..str..]'), f, [[], ['hi']])
 
     def test_set_of_int(self):
         @contract('({int},) -> int')
@@ -106,8 +116,8 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f(set([1, 2, 3])), 3)
         self.assertEqual(f(set()), 0)
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a set, got a list$', f, [1, 2, 3])
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, set([1, 2, 'hi']))
+        self.assertRaisesString(FailedContract, 'expected input is ({int},), but got (%s,)' % red('list'), f, [1, 2, 3])
+        self.assertRaisesString(FailedContract, 'expected input is ({int},), but got ({..%s..},)' % red('str'), f, set([1, 2, 'hi']))
 
     def test_list_of_set_of_int(self):
         @contract('([{int}],) -> [int]')
@@ -118,8 +128,9 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f([]), [])
         self.assertEqual(f([set()]), [0])
         # these are not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected a set, got a int$', f, [1, 2, 3])
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, [set(), set(['hi'])])
+        self.assertRaisesString(FailedContract, 'expected input is ([{int}],), but got (%s,)' % red('set'), f, {1})
+        self.assertRaisesString(FailedContract, 'expected input is ([{int}],), but got ([..%s..],)' % red('int'), f, [1, 2, 3])
+        self.assertRaisesString(FailedContract, 'expected input is ([{int}],), but got ([..%s..],)' % red('{..str..}'), f, [set(), set(['hi'])])
 
     def test_dict(self):
         class C(object):
@@ -130,8 +141,11 @@ class TestContracts(unittest.TestCase):
         # this is ok
         self.assertEqual(type(f({5: 'hi'}, 5)), C)
         # this is not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type str, got type int$', f, {5: 10}, 5)
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, {'hello': 'hi'}, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (int:str,int), but got ({..int:%s..},int,)' % red('int'), f, {5: 10}, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (int:str,int), but got ({..%s:str..},int,)' % red('str'), f, {'hello': 'hi'}, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (int:str,int), but got ({..%s:%s..},int,)' % (red('str'), red('int')), f, {'hello': 5}, 5)
+        self.assertRaisesString(FailedContract, 'expected input is (int:str,int), but got ({..%s:%s..},%s,)' % (red('str'), red('int'), red('str')), f, {'hello': 5}, 'derp')
+        self.assertRaisesString(FailedContract, 'expected input is (int:str,int), but got (int:str,%s,)' % red('str'), f, {5: 'hello'}, 'derp')
 
     def test_nullable(self):
         @contract('(int?,) -> int')
@@ -144,7 +158,7 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f(None), 5)
         self.assertEqual(f(2), 4)
         # not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type str$', f, 'blargh')
+        self.assertRaisesString(FailedContract, 'expected input is (int?,), but got (%s,)' % red('str'), f, 'blargh')
 
     def test_nullable_dict(self):
         @contract('(int, int:(str?)) -> str')
@@ -154,7 +168,7 @@ class TestContracts(unittest.TestCase):
         self.assertEqual(f(5, {5: 'z'}), 'z')
         self.assertEqual(f(5, {5: None}), 'bloop')
         # not ok
-        self.assertRaisesRegexp(FailedContract, r'^expected type int, got type NoneType$', f, 5, {None: 'aaa'})
+        self.assertRaisesString(FailedContract, 'expected input is (int,int:(str?)), but got (int,{..%s:(str?)..},)' % red('NoneType'), f, 5, {None: 'aaa'})
 
     def test_invalid_contracts(self):
         # that's just not a valid type.
@@ -167,6 +181,19 @@ class TestContracts(unittest.TestCase):
             @contract('str')
             def f():
                 pass
+
+    def test_awesome_error_messages(self):
+        @contract('([int],) -> str')
+        def f(l_o_i):
+            return 'aaaaaa'
+        self.assertRaisesString(FailedContract, 'expected input is ([int],), but got (%s,)' % red('int'), f, 5)
+        @contract('([int], [[str]]) -> str')
+        def f(l_o_i, l_o_l_o_i):
+            return 'aaaaaa'
+        # ehhhhh
+        #f([5, 'hehe'], [['derp', 'durp'], [4, 'lawl']])
+        #self.assertRaisesString(FailedContract, 'expected input is ([int],[[str]]), but got ([..%s..],[..%s..],)' % (red('str'), red('[..int..]')),
+        #                        f, [5, 'hehe'], [['derp', 'durp'], [4, 'lawl']])                      
 
 if __name__ == '__main__':
     unittest.main()
