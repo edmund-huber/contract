@@ -1,8 +1,12 @@
-import termcolor
 import re
 
-def red(s):
-    return termcolor.colored(s, 'red')
+try:
+    import termcolor
+    def red(s):
+        return termcolor.colored(s, 'red')
+except:
+    def red(s):
+        return '>>%s<<' % s
 
 class InvalidContract(Exception):
     pass
