@@ -284,12 +284,13 @@ def contract(s, debug=False):
     parse = exprs[0]
     # here's the wrapper that enforces the contract.
     def wrapped(f):
+        where = '%s L%i' % (f.func_code.co_filename, f.func_code.co_firstlineno)
         def inner(*args):
             # check the input..
             try:
                 check_value(parse['rhs'][0], args)
             except InternalFailedContract, e:
-                raise FailedContract('expected input is %s, but got %s' % (e.args[0], e.args[1]))
+                raise FailedContract('%s: expected input is %s, but got %s' % (where, e.args[0], e.args[1]))
             # Now check the output. We do input and output checking
             # separately, because we don't want to run the inner
             # method with input which we know is wrong.
@@ -297,7 +298,7 @@ def contract(s, debug=False):
             try:
                 check_value(parse['rhs'][2], output)
             except InternalFailedContract, e:
-                raise FailedContract('expected output is %s, but got %s' % (e.args[0], e.args[1]))
+                raise FailedContract('%s: expected output is %s, but got %s' % (where, e.args[0], e.args[1]))
             # if it got this far, we're good.
             return output
         # this is horrible, there needs to be some enforcement of a canonical form for this to really work
