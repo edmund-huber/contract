@@ -39,6 +39,7 @@ t_lbrace = ('lbrace', r'{')
 t_rbrace = ('rbrace', r'}')
 t_colon = ('colon', r':')
 t_question = ('question', r'\?')
+t_caret = ('caret', r'\^')
 
 root = 'fun'
 rules = [
@@ -66,6 +67,8 @@ rules = [
     # either nullable, or not.
     ('typ', ('t', t_question)),
     ('typ', ('t',)),
+    # instance of a concrete type.
+    ('typ', (t_caret, t_type)),
     ]
 
 def rule_matcher(rule, lhs, *rhs):
@@ -191,6 +194,15 @@ def check_value(schema, value):
     elif rule_matcher(schema, 'typ', 't', t_question):
         if value is not None:
             check_value(schema['rhs'][0], value)
+    elif rule_matcher(schema, 'typ', t_caret, t_type):
+        expect_base_type = schema['rhs'][1]['token']
+        def find_base_classes(o):
+            bases = set([b.__name__ for b in o.__bases__])
+            for b in o.__bases__:
+                bases.update(find_base_classes(b))
+            return bases
+        if expect_base_type not in find_base_classes(type(value)):
+            raise InternalFailedContract(expect_base_type, red(type(value).__name__))
 
     # list
     elif rule_matcher(schema, 'list', t_lbrack, 'typ', t_rbrack):
